@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
-using TuCreditoMiVivienda.Api.CustomerContext.Data;
+using Microsoft.EntityFrameworkCore;
 using TuCreditoMiVivienda.Api.CustomerContext.Domain;
+using TuCreditoMiVivienda.Api.Data;
 
 namespace TuCreditoMiVivienda.Api.CustomerContext.Api;
 
@@ -31,30 +32,35 @@ public static class CustomerEndpoints
             }
 
             return Results.BadRequest(new { message = "Credenciales incorrectas" });
-        });
+        })
+        .WithTags("Authentication");
 
         // ---------- CLIENTES ----------
-        app.MapGet("/api/clients", (CustomersDb db) =>
-            Results.Ok(db.Clients));
+        app.MapGet("/api/clients", async (AppDbContext db) =>
+            Results.Ok(await db.Clients.ToListAsync()))
+            .WithTags("Clients");
 
-        app.MapGet("/api/clients/{id:guid}", (Guid id, CustomersDb db) =>
+        app.MapGet("/api/clients/{id:guid}", async (Guid id, AppDbContext db) =>
         {
-            var client = db.Clients.FirstOrDefault(c => c.Id == id);
+            var client = await db.Clients.FirstOrDefaultAsync(c => c.Id == id);
             return client is null ? Results.NotFound() : Results.Ok(client);
-        });
+        })
+        .WithTags("Clients");
 
-        app.MapPost("/api/clients", (CustomersDb db, [FromBody] Client client) =>
+        app.MapPost("/api/clients", async (AppDbContext db, [FromBody] Client client) =>
         {
             if (client.Id == Guid.Empty)
                 client.Id = Guid.NewGuid();
 
             db.Clients.Add(client);
+            await db.SaveChangesAsync();
             return Results.Created($"/api/clients/{client.Id}", client);
-        });
+        })
+        .WithTags("Clients");
 
-        app.MapPut("/api/clients/{id:guid}", (Guid id, CustomersDb db, [FromBody] Client updated) =>
+        app.MapPut("/api/clients/{id:guid}", async (Guid id, AppDbContext db, [FromBody] Client updated) =>
         {
-            var client = db.Clients.FirstOrDefault(c => c.Id == id);
+            var client = await db.Clients.FirstOrDefaultAsync(c => c.Id == id);
             if (client is null) return Results.NotFound();
 
             client.Nombres = updated.Nombres;
@@ -68,17 +74,21 @@ public static class CustomerEndpoints
             client.Email = updated.Email;
             client.UnidadInteres = updated.UnidadInteres;
 
+            await db.SaveChangesAsync();
             return Results.Ok(client);
-        });
+        })
+        .WithTags("Clients");
 
-        app.MapDelete("/api/clients/{id:guid}", (Guid id, CustomersDb db) =>
+        app.MapDelete("/api/clients/{id:guid}", async (Guid id, AppDbContext db) =>
         {
-            var client = db.Clients.FirstOrDefault(c => c.Id == id);
+            var client = await db.Clients.FirstOrDefaultAsync(c => c.Id == id);
             if (client is null) return Results.NotFound();
 
             db.Clients.Remove(client);
+            await db.SaveChangesAsync();
             return Results.NoContent();
-        });
+        })
+        .WithTags("Clients");
 
         return app;
     }

@@ -13,57 +13,124 @@ public static class LoanCalculator
         if (principal <= 0 || termMonths <= 0)
             throw new ArgumentException("Monto y plazo deben ser mayores a cero.");
 
+        // Validar y ajustar meses de gracia
+        var graceMonths = cfg.GraceMonths;
+        if (graceMonths < 0) graceMonths = 0;
+        if (graceMonths > termMonths) graceMonths = termMonths;
+        
+        var graceType = cfg.GraceType?.ToLower() ?? "sin";
+        if (graceType != "sin" && graceType != "total" && graceType != "parcial")
+            graceType = "sin";
+        
+        // Si no hay gracia o es "sin", no aplicar gracia
+        if (graceMonths == 0 || graceType == "sin")
+            graceMonths = 0;
+
         var monthlyRate = GetMonthlyRate(cfg);
-
-        decimal monthlyPayment;
-        if (monthlyRate > 0)
-        {
-            var r = monthlyRate;
-            var n = termMonths;
-            var pow = (decimal)Math.Pow(1 + (double)r, n);
-            monthlyPayment = principal * r * pow / (pow - 1);
-        }
-        else
-        {
-            monthlyPayment = principal / termMonths;
-        }
-
         var schedule = new List<LoanPayment>();
         var balance = principal;
         decimal totalPaid = 0;
         decimal totalInterest = 0;
+        decimal frenchPayment = 0;
+        var remainingMonths = termMonths - graceMonths;
 
-        for (int month = 1; month <= termMonths; month++)
+        // Calcular cuota del tramo francés (si hay meses restantes)
+        if (remainingMonths > 0 && monthlyRate > 0)
+        {
+            var r = monthlyRate;
+            var n = remainingMonths;
+            var pow = (decimal)Math.Pow(1 + (double)r, n);
+            frenchPayment = balance * r * pow / (pow - 1);
+        }
+        else if (remainingMonths > 0)
+        {
+            frenchPayment = balance / remainingMonths;
+        }
+
+        // Procesar meses de gracia
+        for (int month = 1; month <= graceMonths; month++)
         {
             var interest = Math.Round(balance * monthlyRate, 2);
-            var principalPaid = Math.Round(monthlyPayment - interest, 2);
+            decimal payment = 0;
+            decimal principalPaid = 0;
+            decimal newBalance = balance;
 
+            if (graceType == "total")
+            {
+                // Gracia total: no se paga nada, intereses se capitalizan
+                payment = 0;
+                principalPaid = 0;
+                newBalance = Math.Round(balance + interest, 2);
+                totalInterest += interest; // Los intereses se capitalizan pero se cuentan en total
+            }
+            else if (graceType == "parcial")
+            {
+                // Gracia parcial: se pagan solo intereses
+                payment = interest;
+                principalPaid = 0;
+                newBalance = balance; // El saldo no cambia
+                totalPaid += payment;
+                totalInterest += interest;
+            }
+
+            schedule.Add(new LoanPayment
+            {
+                Month = month,
+                Payment = Math.Round(payment, 2),
+                Interest = interest,
+                PrincipalPaid = principalPaid,
+                Balance = newBalance
+            });
+
+            balance = newBalance;
+        }
+
+        // Actualizar cuota francesa si hubo capitalización en gracia total
+        if (graceMonths > 0 && graceType == "total" && remainingMonths > 0 && monthlyRate > 0)
+        {
+            var r = monthlyRate;
+            var n = remainingMonths;
+            var pow = (decimal)Math.Pow(1 + (double)r, n);
+            frenchPayment = balance * r * pow / (pow - 1);
+        }
+
+        // Procesar tramo francés
+        for (int month = graceMonths + 1; month <= termMonths; month++)
+        {
+            var interest = Math.Round(balance * monthlyRate, 2);
+            var principalPaid = Math.Round(frenchPayment - interest, 2);
+            var payment = frenchPayment;
+
+            // Ajuste en el último mes
             if (month == termMonths)
             {
                 principalPaid = balance;
-                monthlyPayment = principalPaid + interest;
+                payment = Math.Round(principalPaid + interest, 2);
             }
 
             balance = Math.Round(balance - principalPaid, 2);
-            totalPaid += monthlyPayment;
+            totalPaid += payment;
             totalInterest += interest;
 
             schedule.Add(new LoanPayment
             {
                 Month = month,
-                Payment = Math.Round(monthlyPayment, 2),
+                Payment = Math.Round(payment, 2),
                 Interest = interest,
                 PrincipalPaid = principalPaid,
                 Balance = balance
             });
         }
 
+        // Calcular cuota promedio (solo del tramo francés, excluyendo gracia)
+        var averagePayment = remainingMonths > 0 ? frenchPayment : 0;
+
         var summary = new LoanSummary
         {
             Principal = principal,
             TermMonths = termMonths,
             MonthlyRate = Math.Round(monthlyRate * 100, 4),
-            MonthlyPayment = Math.Round(monthlyPayment, 2),
+            MonthlyPayment = Math.Round(averagePayment, 2),
             TotalPaid = Math.Round(totalPaid, 2),
             TotalInterest = Math.Round(totalInterest, 2)
         };

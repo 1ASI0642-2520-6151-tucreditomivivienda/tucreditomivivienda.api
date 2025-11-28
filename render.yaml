@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: tu-credito-mi-vivienda-api
+    env: dotnet
+    buildCommand: cd TuCreditoMiVivienda.Api && dotnet publish -c Release -o ./publish
+    startCommand: cd TuCreditoMiVivienda.Api && dotnet ./publish/TuCreditoMiVivienda.Api.dll
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://0.0.0.0:$PORT
+
