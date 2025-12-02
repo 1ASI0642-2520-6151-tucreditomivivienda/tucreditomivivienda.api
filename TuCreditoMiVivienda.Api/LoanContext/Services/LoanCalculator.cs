@@ -50,22 +50,26 @@ public static class LoanCalculator
         // Procesar meses de gracia
         for (int month = 1; month <= graceMonths; month++)
         {
-            var interest = Math.Round(balance * monthlyRate, 2);
             decimal payment = 0;
             decimal principalPaid = 0;
             decimal newBalance = balance;
+            decimal interest = 0;
 
             if (graceType == "total")
             {
                 // Gracia total: no se paga nada, intereses se capitalizan
+                // Capitalización: Saldo Final = Saldo Inicial * (1 + TEM)
+                // No redondear el interés antes de capitalizar para mayor precisión
+                newBalance = Math.Round(balance * (1 + monthlyRate), 2);
+                interest = newBalance - balance; // Interés capitalizado (para contabilización)
                 payment = 0;
                 principalPaid = 0;
-                newBalance = Math.Round(balance + interest, 2);
                 totalInterest += interest; // Los intereses se capitalizan pero se cuentan en total
             }
             else if (graceType == "parcial")
             {
                 // Gracia parcial: se pagan solo intereses
+                interest = Math.Round(balance * monthlyRate, 2);
                 payment = interest;
                 principalPaid = 0;
                 newBalance = balance; // El saldo no cambia
